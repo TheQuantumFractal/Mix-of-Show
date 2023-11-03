@@ -11,6 +11,7 @@ import scipy.stats
 import sys
 import torch
 import warnings
+import DeepFace
 
 sys.path.append('../')
 

@@ -19,6 +19,7 @@ import warnings
 from packaging import version
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
+from deepface import DeepFace
 
 
 def parse_args():
@@ -209,22 +210,31 @@ def main():
     if device == 'cpu':
         warnings.warn('CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
                       'If you\'re reporting results on CPU, please note this when you report.')
-    model, transform = clip.load('ViT-B/32', device=device, jit=False)
-    model.eval()
+    # model, transform = clip.load('ViT-B/32', device=device, jit=False)
+    # model.eval()
 
-    image_feats = extract_all_images(image_paths, model, device, batch_size=64, num_workers=0)
-    ref_image_feats = extract_all_images(ref_image_paths, model, device, batch_size=64, num_workers=0)
+    # image_feats = extract_all_images(image_paths, model, device, batch_size=64, num_workers=0)
+    # ref_image_feats = extract_all_images(ref_image_paths, model, device, batch_size=64, num_workers=0)
+
+    scores = 0.
+    for i in image_paths:
+        for j in ref_image_paths:
+            d = DeepFace.verify(i, j, model_name="ArcFace", enforce_detection=False,detector_backend="retinaface")
+            scores += d["distance"]
+            print(d["distance"])
+    scores /= len(image_paths) * len(ref_image_paths)
+    print("FACE", scores)
 
     # get image-text clipscore
-    _, per_instance_image_text, candidate_feats = get_clip_score(model, image_feats, ref_image_feats, device)
+    # _, per_instance_image_text, candidate_feats = get_clip_score(model, image_feats, ref_image_feats, device)
 
-    scores = {
-        image_id: {
-            'CLIPScore': float(clipscore)
-        }
-        for image_id, clipscore in zip(image_ids, per_instance_image_text)
-    }
-    print('CLIPScore (Image-Alignment): {:.4f}'.format(np.mean([s['CLIPScore'] for s in scores.values()])))
+    # scores = {
+    #     image_id: {
+    #         'CLIPScore': float(clipscore)
+    #     }
+    #     for image_id, clipscore in zip(image_ids, per_instance_image_text)
+    # }
+    # print('CLIPScore (Image-Alignment): {:.4f}'.format(np.mean([s['CLIPScore'] for s in scores.values()])))
 
 
 if __name__ == '__main__':
