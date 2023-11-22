@@ -20,8 +20,9 @@ class LorsaModel(FinetuneModel):
         loss, l1, non_zeros = self.net_g(self.images, self.prompts, self.masks)
         loss_dict['loss'] = loss
         loss_dict['loss_l1'] = l1
-        loss += 100*l1
-        loss_dict["nonzeros"] = non_zeros
+        loss += self.opt["network_g"]["finetune_cfg"]["lambda"]*l1
+        loss_dict["nonzeros_percent"] = non_zeros[0]/non_zeros[1]
+        loss_dict["non_zeros"] = non_zeros[0]
         loss.backward()
 
         grads_text_encoder = self.get_bare_model(self.net_g).text_encoder.get_input_embeddings().weight.grad
@@ -35,6 +36,7 @@ class LorsaModel(FinetuneModel):
             clip_grad_norm_(self.net_g.parameters(), max_norm=self.opt['train']['max_grad_norm'])
 
         self.optimizer_g.step()
+        self.net_g.module.set_zeros()
 
         token_embeds = self.get_bare_model(self.net_g).text_encoder.get_input_embeddings().weight
         for token_id in self.get_bare_model(self.net_g).new_concept_token_id:

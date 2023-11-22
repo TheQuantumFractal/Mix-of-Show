@@ -40,6 +40,7 @@ class LoRSA(Stable_Diffusion):
         self.sparsity_list = []
         if finetune_cfg:
             self.init_colora(finetune_cfg)
+        self.shrinkage = finetune_cfg["shrinkage"]
 
     def init_colora(self, finetune_cfg):
         logger = get_root_logger()
@@ -220,16 +221,21 @@ class LoRSA(Stable_Diffusion):
     def get_l1(self):
         loss_l1 = 0.
         for parm in self.sparsity_list:
-            loss_l1 += torch.mean(torch.abs(parm.weight))
+            loss_l1 += torch.sum(torch.abs(parm))
         return loss_l1
+    
+    def set_zeros(self):
+        with torch.no_grad():
+            for parm in self.sparsity_list:
+                parm.data = torch.where(torch.abs(parm.data) >= self.shrinkage, parm.data, 0)
     
     def get_nonzeros(self):
         count = 0.
         total = 0.
         for parm in self.sparsity_list:
-            count += torch.sum(parm.weight > 1e-5)
-            total += torch.numel(parm.weight)
-        return count / total
+            count += torch.count_nonzero(parm.data)
+            total += torch.numel(parm.data)
+        return count, total
 
     def load_delta_state_dict(self, delta_state_dict):
         # load embedding

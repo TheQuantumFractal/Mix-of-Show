@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 @torch.no_grad()
@@ -21,22 +22,26 @@ class LoRALinearLayer(nn.Module):
         super().__init__()
 
         self.name = name
+        self.class_name = original_module.__class__.__name__
 
         if original_module.__class__.__name__ == 'Conv2d':
             in_channels, out_channels = original_module.in_channels, original_module.out_channels
-            self.down = torch.nn.Conv2d(in_channels, rank, (1, 1), bias=False)
-            self.up = torch.nn.Conv2d(rank, out_channels, (1, 1), bias=False)
+            self.stride = original_module.stride
+            self.padding = original_module.padding
+            self.dilation = original_module.dilation
         else:
-            in_features, out_features = original_module.in_features, original_module.out_features
-            self.down = nn.Linear(in_features, rank, bias=False)
-            self.up = nn.Linear(rank, out_features, bias=False)
+            in_channels, out_channels = original_module.in_features, original_module.out_features
+        self.down = torch.nn.Parameter(torch.zeros(rank, in_channels))
+        self.up = torch.nn.Parameter(torch.zeros(out_channels, rank))
 
         self.register_buffer('alpha', torch.tensor(alpha))
 
-        nn.init.normal_(self.down.weight, std=1 / rank)
-        nn.init.zeros_(self.up.weight)
+        nn.init.normal_(self.down, std=1 / rank)
+        nn.init.zeros_(self.up)
 
-        self.original_forward = original_module.forward
+        # self.original_forward = original_module.forward
+        self.original_weights = torch.nn.Parameter(original_module.weight.detach(), requires_grad=False)
+        self.original_bias = torch.nn.Parameter(original_module.bias.detach(), requires_grad=False) if original_module.bias is not None else None
         original_module.forward = self.forward
 
         self.enable_drop = False
@@ -46,7 +51,12 @@ class LoRALinearLayer(nn.Module):
             drop_mul = 0
         else:
             drop_mul = 1
-        hidden_states = self.original_forward(hidden_states) + drop_mul * self.alpha * self.up(self.down(hidden_states))
+        if self.class_name == 'Conv2d':
+            new_weights = self.original_weights + (drop_mul * self.alpha * self.up @ self.down).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
+            hidden_states = F.conv2d(hidden_states, new_weights, self.original_bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
+        else:
+            new_weights = self.original_weights + (drop_mul * self.alpha * self.up @ self.down)
+            hidden_states = F.linear(hidden_states, new_weights, self.original_bias)
         return hidden_states
 
 
@@ -56,25 +66,28 @@ class LoRSALinearLayer(nn.Module):
         super().__init__()
 
         self.name = name
+        self.class_name = original_module.__class__.__name__
 
         if original_module.__class__.__name__ == 'Conv2d':
             in_channels, out_channels = original_module.in_channels, original_module.out_channels
-            self.down = torch.nn.Conv2d(in_channels, rank, (1, 1), bias=False)
-            self.up = torch.nn.Conv2d(rank, out_channels, (1, 1), bias=False)
-            self.sparse = torch.nn.Conv2d(in_channels, out_channels, (1, 1), bias=False)
+            self.stride = original_module.stride
+            self.padding = original_module.padding
+            self.dilation = original_module.dilation
         else:
-            in_features, out_features = original_module.in_features, original_module.out_features
-            self.down = nn.Linear(in_features, rank, bias=False)
-            self.up = nn.Linear(rank, out_features, bias=False)
-            self.sparse = nn.Linear(in_features, out_features, bias=False)
+            in_channels, out_channels = original_module.in_features, original_module.out_features
+        self.down = torch.nn.Parameter(torch.zeros(rank, in_channels))
+        self.up = torch.nn.Parameter(torch.zeros(out_channels, rank))
+        self.sparse = torch.nn.Parameter(torch.zeros(out_channels, in_channels))
 
         self.register_buffer('alpha', torch.tensor(alpha))
 
-        nn.init.normal_(self.down.weight, std=1 / rank)
-        nn.init.zeros_(self.up.weight)
-        nn.init.zeros_(self.sparse.weight)
+        nn.init.normal_(self.down, std=1 / rank)
+        nn.init.zeros_(self.up)
+        nn.init.zeros_(self.sparse)
 
-        self.original_forward = original_module.forward
+        # self.original_forward = original_module.forward)
+        self.original_weights = torch.nn.Parameter(original_module.weight.detach(), requires_grad=False)
+        self.original_bias = torch.nn.Parameter(original_module.bias.detach(), requires_grad=False) if original_module.bias is not None else None
         original_module.forward = self.forward
 
         self.enable_drop = False
@@ -84,5 +97,10 @@ class LoRSALinearLayer(nn.Module):
             drop_mul = 0
         else:
             drop_mul = 1
-        hidden_states = self.original_forward(hidden_states) + drop_mul * self.alpha * (self.up(self.down(hidden_states)) + self.sparse(hidden_states))
+        if self.class_name == 'Conv2d':
+            new_weights = self.original_weights + (drop_mul * self.alpha * (self.up @ self.down + self.sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
+            hidden_states = F.conv2d(hidden_states, new_weights, self.original_bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
+        else:
+            new_weights = self.original_weights + (drop_mul * self.alpha * (self.up @ self.down + self.sparse))
+            hidden_states = F.linear(hidden_states, new_weights, self.original_bias)
         return hidden_states

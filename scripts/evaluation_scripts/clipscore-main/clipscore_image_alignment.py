@@ -218,12 +218,14 @@ def main():
 
     scores = 0.
     for i in image_paths:
-        for j in ref_image_paths:
-            d = DeepFace.verify(i, j, model_name="ArcFace", enforce_detection=False,detector_backend="retinaface")
-            scores += d["distance"]
-            print(d["distance"])
+        if ">" in i:
+            for j in ref_image_paths:
+                d = DeepFace.verify(i, j, model_name="ArcFace", enforce_detection=False,detector_backend="retinaface")
+                scores += (d["distance"] <= 0.68)
+                print(d["distance"])
     scores /= len(image_paths) * len(ref_image_paths)
-    print("FACE", scores)
+    print(f"scores for {args.image_dir}", scores)
+    
 
     # get image-text clipscore
     # _, per_instance_image_text, candidate_feats = get_clip_score(model, image_feats, ref_image_feats, device)

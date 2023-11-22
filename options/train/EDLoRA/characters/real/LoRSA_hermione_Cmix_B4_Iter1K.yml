@@ -42,23 +42,25 @@ network_g:
   type: LoRSA
   pretrained_path: experiments/pretrained_models/chilloutmix
   finetune_cfg:
+    shrinkage: !!float 1e-6
+    lambda: !!float 1e-4
     text_embedding:
       enable_tuning: true
-      lr: !!float 1e-3
+      lr: !!float 5e-4
     text_encoder:
       enable_tuning: true
       lora_cfg:
         rank: 4
         alpha: 1.0
         where: CLIPAttention
-      lr: !!float 1e-5
+      lr: !!float 5e-6
     unet:
       enable_tuning: true
       lora_cfg:
         rank: 4
         alpha: 1.0
         where: CrossAttention
-      lr: !!float 1e-4
+      lr: !!float 5e-5
   new_concept_token: <hermione1>+<hermione2>
   initializer_token: <rand-0.013>+woman
   sd_version: v1
@@ -77,19 +79,14 @@ train:
     weight_decay: 0.01
     betas: [ 0.9, 0.999 ] # align with taming
 
-  kde_opt:
-    type: KDELoss
-    loss_weight: 0.002
-    bandwidth: 0.5
-
   drop_start_iter: -1
   unet_kv_drop_rate: 0.0
+  emb_norm_threshold: !!float 5.5e-1
 
   scheduler:
-    type: LinearLR
-    num_epochs: 1000
+    type: ConstantLR
 
-  total_iter: 1000 # 5 epoch
+  total_iter: 600 # 5 epoch
   warmup_iter: -1  # no warm up
 
 # validation settings
