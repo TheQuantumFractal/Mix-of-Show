@@ -118,6 +118,9 @@ def train(root_path, args):
 
             loss = EDLoRA_trainer(batch['images'], batch['prompts'], masks, batch['img_masks'])
             loss_dict['loss'] = loss
+            non_zeros, count = EDLoRA_trainer.module.get_nonzeros()
+            loss_dict['nonzeros'] = non_zeros
+            loss_dict['nonzeros_percent'] = non_zeros / count
 
             # get fix embedding and learn embedding
             index_no_updates = torch.arange(len(accelerator.unwrap_model(EDLoRA_trainer).tokenizer)) != -1
@@ -128,6 +131,7 @@ def train(root_path, args):
             accelerator.backward(loss)
             optimizer.step()
             lr_scheduler.step()
+            EDLoRA_trainer.module.set_zeros()
             optimizer.zero_grad()
 
         if accelerator.sync_gradients:

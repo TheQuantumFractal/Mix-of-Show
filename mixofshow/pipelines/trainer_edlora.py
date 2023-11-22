@@ -48,6 +48,7 @@ class EDLoRATrainer(nn.Module):
 
         # 2. Define train scheduler
         self.scheduler = DDPMScheduler.from_pretrained(pretrained_path, subfolder='scheduler')
+        self.sparsity_list = []
 
         # 3. define training cfg
         self.enable_edlora = enable_edlora
@@ -62,6 +63,8 @@ class EDLoRATrainer(nn.Module):
             revise_edlora_unet_attention_forward(self.unet)  # support both lora and edlora forward
 
         if finetune_cfg:
+            self.shrinkage = finetune_cfg["shrinkage"]
+            self.l = finetune_cfg["lambda"]
             self.set_finetune_cfg(finetune_cfg)
 
         self.noise_offset = noise_offset
@@ -108,6 +111,7 @@ class EDLoRATrainer(nn.Module):
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear':
                             lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **text_encoder_cfg['lora_cfg'])
+                            self.sparsity_list.append(lora_module.sparse)
                             self.text_encoder_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
 
@@ -129,6 +133,7 @@ class EDLoRATrainer(nn.Module):
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear' or (child_module.__class__.__name__ == 'Conv2d' and child_module.kernel_size == (1, 1)):
                             lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **unet_cfg['lora_cfg'])
+                            self.sparsity_list.append(lora_module.sparse)
                             self.unet_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
 
@@ -257,6 +262,8 @@ class EDLoRATrainer(nn.Module):
             if not torch.isnan(attention_loss):  # full mask
                 loss = loss + attention_loss
             self.controller.reset()
+        
+        loss += self.get_l1()*self.l
 
         return loss
 
@@ -311,6 +318,25 @@ class EDLoRATrainer(nn.Module):
 
             attn_reg_total += self.attn_reg_weight * (loss_subject + loss_adjective)
         return attn_reg_total
+    
+    def get_l1(self):
+        loss_l1 = 0.
+        for parm in self.sparsity_list:
+            loss_l1 += torch.sum(torch.abs(parm))
+        return loss_l1
+
+    def set_zeros(self):
+        with torch.no_grad():
+            for parm in self.sparsity_list:
+                parm.data = torch.where(torch.abs(parm.data) >= self.shrinkage, parm.data, 0)
+
+    def get_nonzeros(self):
+        count = 0.
+        total = 0.
+        for parm in self.sparsity_list:
+            count += torch.count_nonzero(parm.data)
+            total += torch.numel(parm.data)
+        return count, total
 
     def load_delta_state_dict(self, delta_state_dict):
         # load embedding
