@@ -33,21 +33,21 @@ def load_new_concept(pipe, new_concept_embedding, enable_edlora=True):
 def merge_lora_into_weight(original_state_dict, lora_state_dict, model_type, alpha):
     def get_lora_down_name(original_layer_name):
         if model_type == 'text_encoder':
-            lora_down_name = original_layer_name.replace('q_proj.weight', 'q_proj.lora_down.weight') \
-                .replace('k_proj.weight', 'k_proj.lora_down.weight') \
-                .replace('v_proj.weight', 'v_proj.lora_down.weight') \
-                .replace('out_proj.weight', 'out_proj.lora_down.weight') \
-                .replace('fc1.weight', 'fc1.lora_down.weight') \
-                .replace('fc2.weight', 'fc2.lora_down.weight')
+            lora_down_name = original_layer_name.replace('q_proj.weight', 'q_proj.lora_down') \
+                .replace('k_proj.weight', 'k_proj.lora_down') \
+                .replace('v_proj.weight', 'v_proj.lora_down') \
+                .replace('out_proj.weight', 'out_proj.lora_down') \
+                .replace('fc1.weight', 'fc1.lora_down') \
+                .replace('fc2.weight', 'fc2.lora_down')
         else:
-            lora_down_name = k.replace('to_q.weight', 'to_q.lora_down.weight') \
-                .replace('to_k.weight', 'to_k.lora_down.weight') \
-                .replace('to_v.weight', 'to_v.lora_down.weight') \
-                .replace('to_out.0.weight', 'to_out.0.lora_down.weight') \
-                .replace('ff.net.0.proj.weight', 'ff.net.0.proj.lora_down.weight') \
-                .replace('ff.net.2.weight', 'ff.net.2.lora_down.weight') \
-                .replace('proj_out.weight', 'proj_out.lora_down.weight') \
-                .replace('proj_in.weight', 'proj_in.lora_down.weight')
+            lora_down_name = k.replace('to_q.weight', 'to_q.lora_down') \
+                .replace('to_k.weight', 'to_k.lora_down') \
+                .replace('to_v.weight', 'to_v.lora_down') \
+                .replace('to_out.0.weight', 'to_out.0.lora_down') \
+                .replace('ff.net.0.proj.weight', 'ff.net.0.proj.lora_down') \
+                .replace('ff.net.2.weight', 'ff.net.2.lora_down') \
+                .replace('proj_out.weight', 'proj_out.lora_down') \
+                .replace('proj_in.weight', 'proj_in.lora_down')
 
         return lora_down_name
 
@@ -58,17 +58,19 @@ def merge_lora_into_weight(original_state_dict, lora_state_dict, model_type, alp
     for k in new_state_dict.keys():
         lora_down_name = get_lora_down_name(k)
         lora_up_name = lora_down_name.replace('lora_down', 'lora_up')
+        lora_sparse_name = lora_down_name.replace('lora_down', 'lora_sparse')
 
         if lora_up_name in lora_state_dict:
             load_cnt += 1
             original_params = new_state_dict[k]
             lora_down_params = lora_state_dict[lora_down_name].to(original_params.device)
             lora_up_params = lora_state_dict[lora_up_name].to(original_params.device)
+            lora_sparse_params = lora_state_dict[lora_sparse_name].to(original_params.device)
             if len(original_params.shape) == 4:
-                lora_param = lora_up_params.squeeze() @ lora_down_params.squeeze()
+                lora_param = lora_up_params @ lora_down_params + lora_sparse_params
                 lora_param = lora_param.unsqueeze(-1).unsqueeze(-1)
             else:
-                lora_param = lora_up_params @ lora_down_params
+                lora_param = lora_up_params @ lora_down_params + lora_sparse_params
             merge_params = original_params + alpha * lora_param
             new_state_dict[k] = merge_params
 

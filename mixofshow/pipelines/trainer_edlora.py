@@ -111,7 +111,7 @@ class EDLoRATrainer(nn.Module):
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear':
                             lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **text_encoder_cfg['lora_cfg'])
-                            self.sparsity_list.append(lora_module.sparse)
+                            self.sparsity_list.append(lora_module.lora_sparse)
                             self.text_encoder_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
 
@@ -133,7 +133,7 @@ class EDLoRATrainer(nn.Module):
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear' or (child_module.__class__.__name__ == 'Conv2d' and child_module.kernel_size == (1, 1)):
                             lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **unet_cfg['lora_cfg'])
-                            self.sparsity_list.append(lora_module.sparse)
+                            self.sparsity_list.append(lora_module.lora_sparse)
                             self.unet_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
 

@@ -118,7 +118,10 @@ def train(root_path, args):
 
             loss = EDLoRA_trainer(batch['images'], batch['prompts'], masks, batch['img_masks'])
             loss_dict['loss'] = loss
-            non_zeros, count = EDLoRA_trainer.module.get_nonzeros()
+            try:
+                non_zeros, count = EDLoRA_trainer.module.get_nonzeros()
+            except:
+                non_zeros, count = EDLoRA_trainer.get_nonzeros()
             loss_dict['nonzeros'] = non_zeros
             loss_dict['nonzeros_percent'] = non_zeros / count
 
@@ -131,7 +134,10 @@ def train(root_path, args):
             accelerator.backward(loss)
             optimizer.step()
             lr_scheduler.step()
-            EDLoRA_trainer.module.set_zeros()
+            try:
+                EDLoRA_trainer.module.set_zeros()
+            except:
+                EDLoRA_trainer.set_zeros()
             optimizer.zero_grad()
 
         if accelerator.sync_gradients:
