@@ -233,8 +233,10 @@ class LoRALinearLayer(nn.Module):
             self.dilation = original_module.dilation
         else:
             in_channels, out_channels = original_module.in_features, original_module.out_features
-        self.lora_down = torch.nn.Parameter(torch.zeros(rank, in_channels))
-        self.lora_up = torch.nn.Parameter(torch.zeros(out_channels, rank))
+        self.rank = rank
+        if rank > 0:
+            self.lora_down = torch.nn.Parameter(torch.zeros(rank, in_channels))
+            self.lora_up = torch.nn.Parameter(torch.zeros(out_channels, rank))
         self.lora_sparse = torch.nn.Parameter(torch.zeros(out_channels, in_channels))
 
         self.register_buffer('alpha', torch.tensor(alpha))
@@ -256,9 +258,15 @@ class LoRALinearLayer(nn.Module):
         else:
             drop_mul = 1
         if self.class_name == 'Conv2d':
-            new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
+            if self.rank > 0:
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
+            else:
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
             hidden_states = F.conv2d(hidden_states, new_weights, self.original_bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
         else:
-            new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse))
+            if self.rank > 0:
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse))
+            else:
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_sparse))
             hidden_states = F.linear(hidden_states, new_weights, self.original_bias)
         return hidden_states

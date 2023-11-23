@@ -1,4 +1,4 @@
-name: 8101_EDLoRA_potter_Cmix_B4_Repeat500
+name: 8101_EDLoRSA_potter_Cmix_B12_Repeat500
 manual_seed: 0
 mixed_precision: fp16
 gradient_accumulation_steps: 1
@@ -34,22 +34,22 @@ models:
   pretrained_path: experiments/pretrained_models/chilloutmix
   enable_edlora: true  # true means ED-LoRA, false means vallina LoRA
   finetune_cfg:
-    shrinkage: !!float 1e6
-    lambda: !!float 0
+    shrinkage: !!float 1e-6
+    lambda: !!float 1e-4
     text_embedding:
       enable_tuning: true
       lr: !!float 1e-3
     text_encoder:
       enable_tuning: true
       lora_cfg:
-        rank: 4
+        rank: 12
         alpha: 1.0
         where: CLIPAttention
       lr: !!float 1e-5
     unet:
       enable_tuning: true
       lora_cfg:
-        rank: 4
+        rank: 12
         alpha: 1.0
         where: Attention
       lr: !!float 1e-4
