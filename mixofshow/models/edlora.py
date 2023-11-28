@@ -237,12 +237,13 @@ class LoRALinearLayer(nn.Module):
         if rank > 0:
             self.lora_down = torch.nn.Parameter(torch.zeros(rank, in_channels))
             self.lora_up = torch.nn.Parameter(torch.zeros(out_channels, rank))
+            nn.init.normal_(self.lora_down, std=1 / rank)
+            nn.init.zeros_(self.lora_up)
         self.lora_sparse = torch.nn.Parameter(torch.zeros(out_channels, in_channels))
 
         self.register_buffer('alpha', torch.tensor(alpha))
 
-        nn.init.normal_(self.lora_down, std=1 / rank)
-        nn.init.zeros_(self.lora_up)
+        
         nn.init.zeros_(self.lora_sparse)
 
         # self.original_forward = original_module.forward)
