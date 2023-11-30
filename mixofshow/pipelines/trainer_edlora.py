@@ -72,24 +72,14 @@ class EDLoRATrainer(nn.Module):
 
     def set_finetune_cfg(self, finetune_cfg):
         logger = get_logger('mixofshow', log_level='INFO')
-        if "dreambooth" in finetune_cfg:
-            params_to_freeze = [self.vae.parameters()]
-            self.dreambooth = True
+        params_to_freeze = [self.vae.parameters(), self.text_encoder.parameters(), self.unet.parameters()]
 
-            # step 2: begin to add trainable paramters
-            params_group_list = [{'params': self.unet.parameters()}]
-            where = "CLIPEncoderLayer"
-            params_list = []
-            for name, module in self.text_encoder.named_modules():
-                if module.__class__.__name__ == where:
-                    params_list.extend(list(module.parameters()))
-            params_group_list.append({'params': params_list})
-        else:
-            self.dreambooth = False
-            params_to_freeze = [self.vae.parameters(), self.text_encoder.parameters(), self.unet.parameters()]
+        # step 1: close all parameters, required_grad to False
+        for params in itertools.chain(*params_to_freeze):
+            params.requires_grad = False
 
-            # step 2: begin to add trainable paramters
-            params_group_list = []
+        # step 2: begin to add trainable paramters
+        params_group_list = []
 
         # 1. text embedding
         if finetune_cfg['text_embedding']['enable_tuning']:
@@ -105,10 +95,6 @@ class EDLoRATrainer(nn.Module):
                 params_group.update({'weight_decay': text_embedding_cfg['weight_decay']})
             params_group_list.append(params_group)
             logger.info(f"optimizing embedding using lr: {text_embedding_cfg['lr']}")
-
-        # step 1: close all parameters, required_grad to False
-        for params in itertools.chain(*params_to_freeze):
-            params.requires_grad = False
 
         # 2. text encoder
         if finetune_cfg['text_encoder']['enable_tuning'] and finetune_cfg['text_encoder'].get('lora_cfg'):
@@ -407,23 +393,14 @@ class EDLoRATrainer(nn.Module):
             learned_embeds = self.text_encoder.get_input_embeddings().weight[concept_cfg['concept_token_ids']]
             delta_dict['new_concept_embedding'][concept_name] = learned_embeds.detach().cpu()
 
-        if self.dreambooth:
-            # save unet model
-            for name, param, in self.unet.named_parameters():
-                delta_dict['unet'][f'{name}'] = param.cpu().clone()
+        # save text model
+        for lora_module in self.text_encoder_lora:
+            for name, param, in lora_module.named_parameters():
+                delta_dict['text_encoder'][f'{lora_module.name}.{name}'] = param.cpu().clone()
 
-            # save text model
-            for name, param, in self.text_encoder.named_parameters():
-                delta_dict['text_encoder'][f'{name}'] = param.cpu().clone()
-        else:
-            # save text model
-            for lora_module in self.text_encoder_lora:
-                for name, param, in lora_module.named_parameters():
-                    delta_dict['text_encoder'][f'{lora_module.name}.{name}'] = param.cpu().clone()
-
-            # save unet model
-            for lora_module in self.unet_lora:
-                for name, param, in lora_module.named_parameters():
-                    delta_dict['unet'][f'{lora_module.name}.{name}'] = param.cpu().clone()
+        # save unet model
+        for lora_module in self.unet_lora:
+            for name, param, in lora_module.named_parameters():
+                delta_dict['unet'][f'{lora_module.name}.{name}'] = param.cpu().clone()
 
         return delta_dict

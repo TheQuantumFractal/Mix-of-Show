@@ -45,14 +45,14 @@ models:
         rank: 4
         alpha: 1.0
         where: CLIPAttention
-      lr: !!float 1e-5
+      lr: !!float 3e-6
     unet:
       enable_tuning: true
       lora_cfg:
         rank: 4
         alpha: 1.0
         where: Attention
-      lr: !!float 1e-4
+      lr: !!float 3e-5
   new_concept_token: <potter1>+<potter2>
   initializer_token: <rand-0.013>+man
   noise_offset: 0.01

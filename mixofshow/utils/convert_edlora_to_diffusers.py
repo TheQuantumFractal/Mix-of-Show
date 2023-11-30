@@ -60,7 +60,7 @@ def merge_lora_into_weight(original_state_dict, lora_state_dict, model_type, alp
         lora_up_name = lora_down_name.replace('lora_down', 'lora_up')
         lora_sparse_name = lora_down_name.replace('lora_down', 'lora_sparse')
 
-        if lora_up_name in lora_state_dict and 'lora' in lora_up_name:
+        if lora_up_name in lora_state_dict:
             load_cnt += 1
             original_params = new_state_dict[k]
             lora_down_params = lora_state_dict[lora_down_name].to(original_params.device)
@@ -78,7 +78,7 @@ def merge_lora_into_weight(original_state_dict, lora_state_dict, model_type, alp
     return new_state_dict
 
 
-def convert_edlora(pipe, state_dict, enable_edlora, alpha=0.6, dreambooth=False):
+def convert_edlora(pipe, state_dict, enable_edlora, alpha=0.6):
 
     state_dict = state_dict['params'] if 'params' in state_dict.keys() else state_dict
 
@@ -89,19 +89,13 @@ def convert_edlora(pipe, state_dict, enable_edlora, alpha=0.6, dreambooth=False)
     # step 2: merge lora weight to unet
     unet_lora_state_dict = state_dict['unet']
     pretrained_unet_state_dict = pipe.unet.state_dict()
-    if dreambooth:
-        updated_unet_state_dict = unet_lora_state_dict
-    else:
-        updated_unet_state_dict = merge_lora_into_weight(pretrained_unet_state_dict, unet_lora_state_dict, model_type='unet', alpha=alpha)
+    updated_unet_state_dict = merge_lora_into_weight(pretrained_unet_state_dict, unet_lora_state_dict, model_type='unet', alpha=alpha)
     pipe.unet.load_state_dict(updated_unet_state_dict)
 
     # step 3: merge lora weight to text_encoder
     text_encoder_lora_state_dict = state_dict['text_encoder']
     pretrained_text_encoder_state_dict = pipe.text_encoder.state_dict()
-    if dreambooth:
-        updated_text_encoder_state_dict = text_encoder_lora_state_dict
-    else:
-        updated_text_encoder_state_dict = merge_lora_into_weight(pretrained_text_encoder_state_dict, text_encoder_lora_state_dict, model_type='text_encoder', alpha=alpha)
+    updated_text_encoder_state_dict = merge_lora_into_weight(pretrained_text_encoder_state_dict, text_encoder_lora_state_dict, model_type='text_encoder', alpha=alpha)
     pipe.text_encoder.load_state_dict(updated_text_encoder_state_dict)
 
     return pipe, new_concept_cfg

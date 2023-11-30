@@ -122,10 +122,8 @@ def train(root_path, args):
                 non_zeros, count = EDLoRA_trainer.module.get_nonzeros()
             except:
                 non_zeros, count = EDLoRA_trainer.get_nonzeros()
-            if count != 0:
-                loss_dict['nonzeros'] = non_zeros
-                loss_dict['nonzeros_percent'] = non_zeros / count
-
+            loss_dict['nonzeros'] = non_zeros
+            loss_dict['nonzeros_percent'] = non_zeros / count
 
             # get fix embedding and learn embedding
             index_no_updates = torch.arange(len(accelerator.unwrap_model(EDLoRA_trainer).tokenizer)) != -1
@@ -193,11 +191,7 @@ def save_and_validation(accelerator, opt, EDLoRA_trainer, val_dataloader, global
             pipe = pipeclass.from_pretrained(opt['models']['pretrained_path'],
                 scheduler=DPMSolverMultistepScheduler.from_pretrained(opt['models']['pretrained_path'], subfolder='scheduler'),
                 torch_dtype=torch.float16).to('cuda')
-            try:
-                dreambooth = opt['models']['finetune_cfg']['dreambooth']
-            except:
-                dreambooth = None
-            pipe, new_concept_cfg = convert_edlora(pipe, torch.load(save_path), enable_edlora=enable_edlora, alpha=lora_alpha, dreambooth=None)
+            pipe, new_concept_cfg = convert_edlora(pipe, torch.load(save_path), enable_edlora=enable_edlora, alpha=lora_alpha)
             pipe.set_new_concept_cfg(new_concept_cfg)
             pipe.set_progress_bar_config(disable=True)
             visual_validation(accelerator, pipe, val_dataloader, f'Iters-{global_step}_Alpha-{lora_alpha}', opt)
