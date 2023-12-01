@@ -1,4 +1,4 @@
-name: 8101_EDLoRA_potter_Cmix_B4_Repeat500
+name: 8101_EDLoRA_potter_Cmix_B0_Repeat500
 manual_seed: 0
 mixed_precision: fp16
 gradient_accumulation_steps: 1
@@ -42,14 +42,14 @@ models:
     text_encoder:
       enable_tuning: true
       lora_cfg:
-        rank: 4
+        rank: 0
         alpha: 1.0
         where: CLIPAttention
       lr: !!float 3e-6
     unet:
       enable_tuning: true
       lora_cfg:
-        rank: 4
+        rank: 0
         alpha: 1.0
         where: Attention
       lr: !!float 3e-5

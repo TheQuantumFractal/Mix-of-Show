@@ -262,6 +262,9 @@ class LoRALinearLayer(nn.Module):
             new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
             hidden_states = F.conv2d(hidden_states, new_weights, self.original_bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
         else:
-            new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse))
+            if self.rank > 0:
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse))
+            else:
+                new_weights = self.original_weights + (drop_mul * self.alpha * self.lora_sparse)
             hidden_states = F.linear(hidden_states, new_weights, self.original_bias)
         return hidden_states
