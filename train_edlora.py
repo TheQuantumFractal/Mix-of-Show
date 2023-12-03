@@ -24,11 +24,29 @@ from test_edlora import visual_validation
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version('0.18.2')
 
+def shrinkage_to_str(shrinkage):
+    shrinkagestr = f'{shrinkage:.0e}'
+    # annoying process to remove leading 0s from the exponent
+    if '0' in shrinkagestr.split('e')[-1]:
+        pieces = shrinkagestr.split('0')
+        shrinkagestr = ''.join(pieces)
+    return shrinkagestr
+
 
 def train(root_path, args):
 
     # load config
     opt = OmegaConf.to_container(OmegaConf.load(args.opt), resolve=True)
+
+    # optional command-line override of shrinkage threshold for sparsity
+    if args.shrinkage is not None:
+        pieces = opt['name'].split(shrinkage_to_str(opt['models']['finetune_cfg']['shrinkage']))
+        opt['name'] = pieces[0] + shrinkage_to_str(args.shrinkage) + pieces[1]
+        opt['shrinkage'] = args.shrinkage
+        print(f'***********************************************************')
+        print(f'***** setting shrinkage threshold to {args.shrinkage} *****')
+        print(f'***** setting new name to {opt["name"]} *****')
+        print(f'***********************************************************')
 
     # set accelerator, mix-precision set in the environment by "accelerate config"
     accelerator = Accelerator(mixed_precision=opt['mixed_precision'], gradient_accumulation_steps=opt['gradient_accumulation_steps'])
@@ -202,6 +220,7 @@ def save_and_validation(accelerator, opt, EDLoRA_trainer, val_dataloader, global
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, default='options/train/EDLoRA/EDLoRA_hina_Anyv4_B4_Iter1K.yml')
+    parser.add_argument('-shrinkage', type=float, default=None)  # allow command-line overriding of the threshold parameter
     args = parser.parse_args()
 
     root_path = osp.abspath(osp.join(__file__, osp.pardir))
