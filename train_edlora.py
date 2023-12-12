@@ -32,6 +32,7 @@ def shrinkage_to_str(shrinkage):
         shrinkagestr = ''.join(pieces)
     return shrinkagestr
 
+genderdict = {'potter': 'man', 'hermione': 'woman'}
 
 def train(root_path, args):
 
@@ -45,6 +46,53 @@ def train(root_path, args):
         opt['shrinkage'] = args.shrinkage
         print(f'***********************************************************')
         print(f'***** setting shrinkage threshold to {args.shrinkage} *****')
+        print(f'***** setting new name to {opt["name"]} *****')
+        print(f'***********************************************************')
+
+    # optional command-line override of L1 weight for sparsity
+    if args.l1 is not None:
+        pieces = opt['name'].split(shrinkage_to_str(opt['models']['finetune_cfg']['lambda']))
+        opt['name'] = pieces[0] + shrinkage_to_str(args.l1) + pieces[1]
+        opt['lambda'] = args.l1
+        print(f'***********************************************************')
+        print(f'***** setting L1 weight to {args.l1} *****')
+        print(f'***** setting new name to {opt["name"]} *****')
+        print(f'***********************************************************')
+
+    # optional command-line override of character name
+    if args.character is not None:
+        # Update experiment name
+        pieces = opt['name'].split('_')
+        old_character = pieces[2]
+        pieces[2] = args.character
+        opt['name'] = '_'.join(pieces)
+        print(f'***********************************************************')
+        print(f'***** setting character to {args.character} *****')
+        print(f'***** setting new name to {opt["name"]} *****')
+        # Update all the character-related settings
+        pieces = opt['datasets']['train']['concept_list'].split(old_character)
+        opt['datasets']['train']['concept_list'] = args.character.join(pieces)
+        pieces = opt['datasets']['train']['replace_mapping']['<TOK>'].split(old_character)
+        opt['datasets']['train']['replace_mapping']['<TOK>'] = args.character.join(pieces)
+        pieces = opt['datasets']['val_vis']['replace_mapping']['<TOK>'].split(old_character)
+        opt['datasets']['val_vis']['replace_mapping']['<TOK>'] = args.character.join(pieces)
+        pieces = opt['models']['new_concept_token'].split(old_character)
+        opt['models']['new_concept_token'] = args.character.join(pieces)
+        # Update gender of base class if necessary
+        if genderdict[args.character] != genderdict[old_character]:
+            pieces = opt['datasets']['val_vis']['prompts'].split(genderdict[old_character])
+            opt['datasets']['val_vis']['prompts'] = genderdict[args.character].join(pieces)
+            pieces = opt['models']['initializer_token'].split(genderdict[old_character])
+            opt['models']['initializer_token'] = genderdict[args.character].join(pieces)
+            print(f'***** setting new gender to {genderdict[args.character]} *****')
+        print(f'***********************************************************')
+
+    # optional command-line override of random seed
+    if args.seed is not None:
+        opt['manual_seed'] = args.seed
+        opt['name'] = opt['name'] + f'_seed{args.seed}'
+        print(f'***********************************************************')
+        print(f'***** setting random seed to {args.seed} *****')
         print(f'***** setting new name to {opt["name"]} *****')
         print(f'***********************************************************')
 
@@ -221,6 +269,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, default='options/train/EDLoRA/EDLoRA_hina_Anyv4_B4_Iter1K.yml')
     parser.add_argument('-shrinkage', type=float, default=None)  # allow command-line overriding of the threshold parameter
+    parser.add_argument('-l1', type=float, default=None)  # allow command-line overriding of the L1 weight
+    parser.add_argument('-character', type=str, default=None)  # allow command-line overriding of the character name
+    parser.add_argument('-seed', type=int, default=None)  # allow command-line overriding of the manual random seed
     args = parser.parse_args()
 
     root_path = osp.abspath(osp.join(__file__, osp.pardir))

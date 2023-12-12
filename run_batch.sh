@@ -32,13 +32,47 @@
 # accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-4_0_Repeat500.yml
 
 
-for shrink_thresh in 2e-5 4e-5 6e-5 8e-5;
+# for shrink_thresh in 2e-5 4e-5 6e-5 8e-5;
+# do
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B4_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B3_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B2_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B1_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+# done
+
+# for l1 in 3e-5 3e-4;
+# do
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B4_1e-6_1e-4_Repeat500.yml -l1 $l1
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B3_1e-6_1e-4_Repeat500.yml -l1 $l1
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B2_1e-6_1e-4_Repeat500.yml -l1 $l1
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B1_1e-6_1e-4_Repeat500.yml -l1 $l1
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-6_1e-4_Repeat500.yml -l1 $l1
+# done
+
+# for seed in 1 2 3 4;
+# do
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B0_Repeat500.yml -seed $seed
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B1_Repeat500.yml -seed $seed
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B2_Repeat500.yml -seed $seed
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B3_Repeat500.yml -seed $seed
+#     accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B4_Repeat500.yml -seed $seed
+# done
+
+# Run just the rank 0 hermione
+# for character in hermione;
+# do
+#     accelerate launch train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-6_1e-4_Repeat500.yml -character $character
+#     accelerate launch train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRA_potter_Cmix_B1_Repeat500.yml -character $character
+# done
+
+# Focus on rank 0 LoRSA and compare sparsity params
+for shrink_thresh in 1e-8 1e-7 1e-6 1e-5 1e-4;  # default is 1e-6, higher means more sparse
 do
-    accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B4_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
-    accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B3_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
-    accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B2_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
-    accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B1_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
-    accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-4_0_Repeat500.yml -shrinkage $shrink_thresh
+    for l1 in 1e-6 1e-5 1e-4 1e-3 1e-2;  # default is 1e-4, higher means more sparse
+    do
+        accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-6_1e-4_Repeat500.yml -shrinkage $shrink_thresh -l1 $l1
+    done
 done
 
 bash /home/sarafk/Mix-of-Show/evaluate_total.sh
