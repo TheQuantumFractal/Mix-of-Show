@@ -42,8 +42,8 @@ def train(root_path, args):
     # optional command-line override of shrinkage threshold for sparsity
     if args.shrinkage is not None:
         pieces = opt['name'].split(shrinkage_to_str(opt['models']['finetune_cfg']['shrinkage']))
-        opt['name'] = pieces[0] + shrinkage_to_str(args.shrinkage) + pieces[1]
-        opt['shrinkage'] = args.shrinkage
+        opt['name'] = pieces[0] + shrinkage_to_str(args.shrinkage) + shrinkage_to_str(opt['models']['finetune_cfg']['shrinkage']).join(pieces[1:])
+        opt['models']['finetune_cfg']['shrinkage'] = args.shrinkage
         print(f'***********************************************************')
         print(f'***** setting shrinkage threshold to {args.shrinkage} *****')
         print(f'***** setting new name to {opt["name"]} *****')
@@ -52,8 +52,11 @@ def train(root_path, args):
     # optional command-line override of L1 weight for sparsity
     if args.l1 is not None:
         pieces = opt['name'].split(shrinkage_to_str(opt['models']['finetune_cfg']['lambda']))
-        opt['name'] = pieces[0] + shrinkage_to_str(args.l1) + pieces[1]
-        opt['lambda'] = args.l1
+        if args.shrinkage == opt['models']['finetune_cfg']['lambda']:
+            opt['name'] = shrinkage_to_str(opt['models']['finetune_cfg']['lambda']).join(pieces[:1]) + shrinkage_to_str(args.l1) + pieces[2]
+        else:
+            opt['name'] = pieces[0] + shrinkage_to_str(args.l1) + shrinkage_to_str(opt['models']['finetune_cfg']['lambda']).join(pieces[1:])
+        opt['models']['finetune_cfg']['lambda'] = args.l1
         print(f'***********************************************************')
         print(f'***** setting L1 weight to {args.l1} *****')
         print(f'***** setting new name to {opt["name"]} *****')
