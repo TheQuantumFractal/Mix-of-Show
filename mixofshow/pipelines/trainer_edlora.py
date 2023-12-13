@@ -66,6 +66,9 @@ class EDLoRATrainer(nn.Module):
             self.shrinkage = finetune_cfg["shrinkage"]
             self.l = finetune_cfg["lambda"]
             self.set_finetune_cfg(finetune_cfg)
+            self.soft_threshold = False
+            if "soft_threshold" in finetune_cfg.keys():
+                self.soft_threshold = finetune_cfg["soft_threshold"]
 
         self.noise_offset = noise_offset
         self.use_mask_loss = use_mask_loss
@@ -328,7 +331,12 @@ class EDLoRATrainer(nn.Module):
     def set_zeros(self):
         with torch.no_grad():
             for parm in self.sparsity_list:
-                parm.data = torch.where(torch.abs(parm.data) >= self.shrinkage, parm.data, 0)
+                if self.soft_threshold:
+                    magnitudes = torch.abs(parm.data)
+                    signs = torch.sign(parm.data)
+                    parm.data = signs * torch.clamp(magnitudes - self.shrinkage, min=0)
+                else:
+                    parm.data = torch.where(torch.abs(parm.data) >= self.shrinkage, parm.data, 0)
 
     def get_nonzeros(self):
         count = 0.

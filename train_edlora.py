@@ -90,6 +90,16 @@ def train(root_path, args):
             print(f'***** setting new gender to {genderdict[args.character]} *****')
         print(f'***********************************************************')
 
+    # optional command-line switch to soft thresholding
+    if args.soft:
+        opt['models']['finetune_cfg']['soft_threshold'] = True
+        opt['name'] = opt['name'] + f'_soft'
+        print(f'***********************************************************')
+        print(f'***** using soft thresholding *****')
+        print(f'***** setting new name to {opt["name"]} *****')
+        print(f'***********************************************************')
+
+
     # optional command-line override of random seed
     if args.seed is not None:
         opt['manual_seed'] = args.seed
@@ -274,6 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('-shrinkage', type=float, default=None)  # allow command-line overriding of the threshold parameter
     parser.add_argument('-l1', type=float, default=None)  # allow command-line overriding of the L1 weight
     parser.add_argument('-character', type=str, default=None)  # allow command-line overriding of the character name
+    parser.add_argument('-soft', action='store_true', default=False)  # allow command-line switch from hard to soft thresholding
     parser.add_argument('-seed', type=int, default=None)  # allow command-line overriding of the manual random seed
     args = parser.parse_args()
 

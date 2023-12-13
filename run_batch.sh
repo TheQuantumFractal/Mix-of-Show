@@ -67,11 +67,11 @@
 # done
 
 # Focus on rank 0 LoRSA and compare sparsity params
-for shrink_thresh in 1e-8 1e-7 1e-6 1e-5 1e-4;  # default is 1e-6, higher means more sparse
+for shrink_thresh in 4e-7 6e-7 8e-7 1e-6 2e-6 3e-6 4e-6 5e-6;  # default is 1e-6, higher means more sparse. tried increments of 10x to no avail.
 do
-    for l1 in 1e-6 1e-5 1e-4 1e-3 1e-2;  # default is 1e-4, higher means more sparse
+    for l1 in 0 4e-5 6e-5 8e-5 1e-4 2e-4 3e-4 4e-4 5e-4;  # default is 1e-4, higher means more sparse. tried increments of 10x to no avail.
     do
-        accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-6_1e-4_Repeat500.yml -shrinkage $shrink_thresh -l1 $l1
+        accelerate launch  train_edlora.py -opt options/train/EDLoRA/real/8101_EDLoRSA_potter_Cmix_B0_1e-6_1e-4_Repeat500.yml -shrinkage $shrink_thresh -l1 $l1 -soft
     done
 done
 
