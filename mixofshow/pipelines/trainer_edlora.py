@@ -49,6 +49,7 @@ class EDLoRATrainer(nn.Module):
         # 2. Define train scheduler
         self.scheduler = DDPMScheduler.from_pretrained(pretrained_path, subfolder='scheduler')
         self.sparsity_list = []
+        self.current_tokens = [0]
 
         # 3. define training cfg
         self.enable_edlora = enable_edlora
@@ -113,7 +114,7 @@ class EDLoRATrainer(nn.Module):
                 if module.__class__.__name__ == where:
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear':
-                            lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **text_encoder_cfg['lora_cfg'])
+                            lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **text_encoder_cfg['lora_cfg'], lorsa_count=len(self.new_concept_cfg), lorsa_val=self.current_tokens)
                             self.sparsity_list.append(lora_module.lora_sparse)
                             self.text_encoder_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
@@ -135,7 +136,7 @@ class EDLoRATrainer(nn.Module):
                 if module.__class__.__name__ == where:
                     for child_name, child_module in module.named_modules():
                         if child_module.__class__.__name__ == 'Linear' or (child_module.__class__.__name__ == 'Conv2d' and child_module.kernel_size == (1, 1)):
-                            lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **unet_cfg['lora_cfg'])
+                            lora_module = LoRALinearLayer(name + '.' + child_name, child_module, **unet_cfg['lora_cfg'], lorsa_count=len(self.new_concept_cfg))
                             self.sparsity_list.append(lora_module.lora_sparse)
                             self.unet_lora.append(lora_module)
                             params_list.extend(list(lora_module.parameters()))
@@ -224,49 +225,68 @@ class EDLoRATrainer(nn.Module):
         # Add noise to the latents according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
         noisy_latents = self.scheduler.add_noise(latents, noise, timesteps)
+        concept = []
+        for i in prompts:
+            idx = 0
+            for concept_name, new_token_cfg in self.new_concept_cfg.items():
+                if concept_name in i:
+                    concept.append(idx)
+                    break
+                idx += 1
+        concept_dict = {}
+        for idx, c in enumerate(concept):
+            if c in concept_dict:
+                concept_dict[c].append(idx)
+            else:
+                concept_dict[c] = [idx]
 
         if self.enable_edlora:
             prompts = bind_concept_prompt(prompts, new_concept_cfg=self.new_concept_cfg)  # edlora
-
-        # get text ids
-        text_input_ids = self.tokenizer(
-            prompts,
-            padding='max_length',
-            max_length=self.tokenizer.model_max_length,
-            truncation=True,
-            return_tensors='pt').input_ids.to(latents.device)
-
-        # Get the text embedding for conditioning
-        encoder_hidden_states = self.text_encoder(text_input_ids)[0]
-        if self.enable_edlora:
-            encoder_hidden_states = rearrange(encoder_hidden_states, '(b n) m c -> b n m c', b=latents.shape[0])  # edlora
-
-        # Predict the noise residual
-        model_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states).sample
-
-        # Get the target for loss depending on the prediction type
-        if self.scheduler.config.prediction_type == 'epsilon':
-            target = noise
-        elif self.scheduler.config.prediction_type == 'v_prediction':
-            target = self.scheduler.get_velocity(latents, noise, timesteps)
-        else:
-            raise ValueError(f'Unknown prediction type {self.scheduler.config.prediction_type}')
-
-        if self.use_mask_loss:
-            loss_mask = masks
-        else:
-            loss_mask = img_masks
-        loss = F.mse_loss(model_pred.float(), target.float(), reduction='none')
-        loss = ((loss * loss_mask).sum([1, 2, 3]) / loss_mask.sum([1, 2, 3])).mean()
-
-        if self.attn_reg_weight is not None:
-            attention_maps = self.controller.get_average_attention()
-            attention_loss = self.cal_attn_reg(attention_maps, masks, text_input_ids)
-            if not torch.isnan(attention_loss):  # full mask
-                loss = loss + attention_loss
-            self.controller.reset()
         
-        loss += self.get_l1()*self.l
+        loss = 0.
+        
+        for c in concept_dict:
+            self.current_tokens[0] = c
+            new_prompts = [prompts[i] for i in concept_dict[c]]
+            # get text ids
+            text_input_ids = self.tokenizer(
+                prompts,
+                padding='max_length',
+                max_length=self.tokenizer.model_max_length,
+                truncation=True,
+                return_tensors='pt').input_ids.to(latents.device)
+
+            # Get the text embedding for conditioning
+            encoder_hidden_states = self.text_encoder(text_input_ids)[0]
+            if self.enable_edlora:
+                encoder_hidden_states = rearrange(encoder_hidden_states, '(b n) m c -> b n m c', b=latents.shape[0])  # edlora
+
+            # Predict the noise residual
+            model_pred = self.unet(noisy_latents[concept_dict[c]], timesteps, encoder_hidden_states).sample
+
+            # Get the target for loss depending on the prediction type
+            if self.scheduler.config.prediction_type == 'epsilon':
+                target = noise[concept_dict[c]]
+            elif self.scheduler.config.prediction_type == 'v_prediction':
+                target = self.scheduler.get_velocity(latents, noise, timesteps)
+            else:
+                raise ValueError(f'Unknown prediction type {self.scheduler.config.prediction_type}')
+
+            if self.use_mask_loss:
+                loss_mask = masks[concept_dict[c]]
+            else:
+                loss_mask = img_masks[concept_dict[c]]
+            tmp_loss = F.mse_loss(model_pred.float(), target.float(), reduction='none')
+            loss += ((tmp_loss * loss_mask).sum([1, 2, 3]) / loss_mask.sum([1, 2, 3])).mean()
+
+            if self.attn_reg_weight is not None:
+                attention_maps = self.controller.get_average_attention()
+                attention_loss = self.cal_attn_reg(attention_maps, masks, text_input_ids)
+                if not torch.isnan(attention_loss):  # full mask
+                    loss = loss + attention_loss
+                self.controller.reset()
+            
+            loss += self.get_l1()*self.l
 
         return loss
 
@@ -325,25 +345,31 @@ class EDLoRATrainer(nn.Module):
     def get_l1(self):
         loss_l1 = 0.
         for parm in self.sparsity_list:
-            loss_l1 += torch.sum(torch.abs(parm))
+            output = torch.zeros_like(parm[0])
+            for parmesan in parm:
+                output += parmesan**2
+            loss_l1 += torch.mean(torch.abs(torch.sqrt(output)))
+            # print(loss_l1)
         return loss_l1
 
     def set_zeros(self):
         with torch.no_grad():
             for parm in self.sparsity_list:
-                if self.soft_threshold:
-                    magnitudes = torch.abs(parm.data)
-                    signs = torch.sign(parm.data)
-                    parm.data = signs * torch.clamp(magnitudes - self.shrinkage, min=0)
-                else:
-                    parm.data = torch.where(torch.abs(parm.data) >= self.shrinkage, parm.data, 0)
+                for parmesan in parm:
+                    if self.soft_threshold:
+                        magnitudes = torch.abs(parmesan.data)
+                        signs = torch.sign(parmesan.data)
+                        parmesan.data = signs * torch.clamp(magnitudes - self.shrinkage, min=0)
+                    else:
+                        parmesan.data = torch.where(torch.abs(parmesan.data) >= self.shrinkage, parmesan.data, 0)
 
     def get_nonzeros(self):
         count = 0.
         total = 0.
         for parm in self.sparsity_list:
-            count += torch.count_nonzero(parm.data)
-            total += torch.numel(parm.data)
+            for parmesan in parm:
+                count += torch.count_nonzero(parmesan.data)
+                total += torch.numel(parmesan.data)
         return count, total
 
     def load_delta_state_dict(self, delta_state_dict):

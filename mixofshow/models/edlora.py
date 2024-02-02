@@ -220,11 +220,12 @@ def revise_edlora_unet_attention_controller_forward(unet, controller):
 
 
 class LoRALinearLayer(nn.Module):
-    def __init__(self, name, original_module, rank=4, alpha=1):
+    def __init__(self, name, original_module, rank=4, alpha=1, lorsa_count=1, lorsa_val=None):
         super().__init__()
 
         self.name = name
         self.class_name = original_module.__class__.__name__
+        self.lorsa_val = [0] if lorsa_val is None else lorsa_val
 
         if original_module.__class__.__name__ == 'Conv2d':
             in_channels, out_channels = original_module.in_channels, original_module.out_channels
@@ -234,17 +235,25 @@ class LoRALinearLayer(nn.Module):
         else:
             in_channels, out_channels = original_module.in_features, original_module.out_features
         self.rank = rank
-        if rank > 0:
-            self.lora_down = torch.nn.Parameter(torch.zeros(rank, in_channels))
-            self.lora_up = torch.nn.Parameter(torch.zeros(out_channels, rank))
-            nn.init.normal_(self.lora_down, std=1 / rank)
-            nn.init.zeros_(self.lora_up)
-        self.lora_sparse = torch.nn.Parameter(torch.zeros(out_channels, in_channels))
+        self.lora_down = []
+        self.lora_up = []
+        self.lora_sparse = []
+        for i in range(lorsa_count):
+            if rank > 0:
+                self.lora_down.append(torch.nn.Parameter(torch.zeros(rank, in_channels)))
+                self.lora_up.append(torch.nn.Parameter(torch.zeros(out_channels, rank)))
+                nn.init.normal_(self.lora_down[i], std=1 / rank)
+                nn.init.zeros_(self.lora_up[i])
+            self.lora_sparse.append(torch.nn.Parameter(torch.zeros(out_channels, in_channels)))
+            nn.init.zeros_(self.lora_sparse[i])
+        self.lora_down = nn.ParameterList(self.lora_down)
+        self.lora_up = nn.ParameterList(self.lora_up)
+        self.lora_sparse = nn.ParameterList(self.lora_sparse)
 
         self.register_buffer('alpha', torch.tensor(alpha))
 
         
-        nn.init.zeros_(self.lora_sparse)
+        
 
         # self.original_forward = original_module.forward)
         self.original_weights = torch.nn.Parameter(original_module.weight.detach(), requires_grad=False)
@@ -254,17 +263,19 @@ class LoRALinearLayer(nn.Module):
         self.enable_drop = False
 
     def forward(self, hidden_states):
+        lorsa_idx = self.lorsa_val[0]
+        # print(lorsa_idx)
         if self.enable_drop and self.training:
             drop_mul = 0
         else:
             drop_mul = 1
         if self.class_name == 'Conv2d':
-            new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse)).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
+            new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up[lorsa_idx] @ self.lora_down[lorsa_idx] + self.lora_sparse[lorsa_idx])).reshape(self.up.shape[0], self.down.shape[1], 1, 1)
             hidden_states = F.conv2d(hidden_states, new_weights, self.original_bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
         else:
             if self.rank > 0:
-                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up @ self.lora_down + self.lora_sparse))
+                new_weights = self.original_weights + (drop_mul * self.alpha * (self.lora_up[lorsa_idx] @ self.lora_down[lorsa_idx] + self.lora_sparse[lorsa_idx]))
             else:
-                new_weights = self.original_weights + (drop_mul * self.alpha * self.lora_sparse)
+                new_weights = self.original_weights + (drop_mul * self.alpha * self.lora_sparse[lorsa_idx])
             hidden_states = F.linear(hidden_states, new_weights, self.original_bias)
         return hidden_states
